@@ -1,6 +1,6 @@
 # EmotionSense
 
-EmotionSense is a Streamlit web application for multi-class emotion detection in text. It classifies short text into six emotion classes using the team's selected DistilBERT model. For non-English input, the app uses Meta's pre-trained NLLB multilingual translation model through Hugging Face Inference API to translate the text to English before emotion prediction.
+EmotionSense is a Streamlit web application for multi-class emotion detection in text. It classifies short text into six emotion classes using the team's selected DistilBERT model. For non-English input, the app uses a pre-trained OPUS-MT multilingual-to-English translation model through Hugging Face Inference API to translate the text to English before emotion prediction.
 
 The app follows the final modeling notebook preprocessing flow: remove URLs, punctuation, digits, and stop words, then apply Porter stemming before passing text into the emotion classifier.
 
@@ -83,6 +83,6 @@ These files are displayed on the Visualizations page. `model_comparison.png` and
 - Traditional ML baselines are included in the modeling notebook for comparison: Naive Bayes, Logistic Regression, SVM, and Random Forest with BoW, TF-IDF, and Word2Vec features
 - Best traditional baseline: SVM with TF-IDF achieved 0.8961 accuracy and 0.8956 weighted F1
 - Bidirectional GRU achieved 0.9171 accuracy and 0.9175 weighted F1
-- Translation model: facebook/nllb-200-distilled-600M through Hugging Face Inference API
-- Multi-language support: Chinese, Malay, Tamil, and Indonesian input can be translated to English using NLLB before prediction
-- Deployment note: Hugging Face API runs the NLLB model externally so Streamlit Cloud does not need to load the full translation model into memory
+- Translation model: Helsinki-NLP/opus-mt-mul-en through Hugging Face Inference API
+- Multi-language support: Chinese, Malay, Tamil, and Indonesian input can be translated to English before prediction
+- Deployment note: Hugging Face API runs the translation model externally so Streamlit Cloud does not need to load a translation model into memory

@@ -11,15 +11,9 @@ import streamlit as st
 BASE_DIR = Path(__file__).resolve().parent
 DATA_PATH = BASE_DIR / "data" / "text.csv"
 DISTILBERT_MODEL_PATH = BASE_DIR / "models" / "distilbert_emotion"
-NLLB_MODEL_NAME = "facebook/nllb-200-distilled-600M"
-NLLB_TARGET_LANGUAGE = "eng_Latn"
-NLLB_LANGUAGE_CODES = {
-    "Chinese": "zho_Hans",
-    "Malay": "zsm_Latn",
-    "Tamil": "tam_Taml",
-    "Indonesian": "ind_Latn",
-}
-NLLB_API_URL = f"https://api-inference.huggingface.co/models/{NLLB_MODEL_NAME}"
+TRANSLATION_MODEL_NAME = "Helsinki-NLP/opus-mt-mul-en"
+TRANSLATION_MODEL_DISPLAY = "Helsinki-NLP OPUS-MT multilingual-to-English"
+SUPPORTED_TRANSLATION_LANGUAGES = {"Chinese", "Malay", "Tamil", "Indonesian"}
 MODEL_COMPARISON_PATH = BASE_DIR / "results" / "model_comparison.png"
 
 LABEL_MAP = {
@@ -282,7 +276,7 @@ def load_translation_bundle():
 
     return {
         "client": InferenceClient(provider="hf-inference", api_key=hf_token, timeout=120),
-        "name": NLLB_MODEL_NAME,
+        "name": TRANSLATION_MODEL_NAME,
     }, None
 
 
@@ -309,8 +303,7 @@ def maybe_translate_to_english(text: str, source_language: str) -> tuple[str, st
     if source_language == "English":
         return text, None
 
-    source_code = NLLB_LANGUAGE_CODES.get(source_language)
-    if source_code is None:
+    if source_language not in SUPPORTED_TRANSLATION_LANGUAGES:
         return text, f"Unsupported translation language selected: {source_language}"
 
     bundle, error = load_translation_bundle()
@@ -320,10 +313,7 @@ def maybe_translate_to_english(text: str, source_language: str) -> tuple[str, st
     try:
         output = bundle["client"].translation(
             text,
-            model=NLLB_MODEL_NAME,
-            src_lang=source_code,
-            tgt_lang=NLLB_TARGET_LANGUAGE,
-            generate_parameters={"max_length": 256},
+            model=TRANSLATION_MODEL_NAME,
         )
         translated = getattr(output, "translation_text", output)
         if not translated:
@@ -531,7 +521,7 @@ def text_analyzer_page():
     use_translation = source_language != "English"
     st.caption("Emotion model: DistilBERT")
     if use_translation:
-        st.caption(f"Translation model: {NLLB_MODEL_NAME} is called through Hugging Face API to translate {source_language} input to English before prediction.")
+        st.caption(f"Translation model: {TRANSLATION_MODEL_DISPLAY} is called through Hugging Face API to translate {source_language} input to English before prediction.")
 
     if st.button("Analyze Emotion", type="primary"):
         if not user_text.strip():
@@ -703,7 +693,7 @@ def model_info_page():
         - Preprocessing: remove URLs, punctuation, digits, stop words, then apply Porter stemming
         - Emotion classifier used in the app: DistilBERT
         - Final DistilBERT performance: 0.9273 accuracy and 0.9268 weighted F1
-        - Multi-language support: NLLB-200 distilled 600M translates non-English input to English before prediction through Hugging Face API
+        - Multi-language support: OPUS-MT multilingual-to-English translates non-English input to English before prediction through Hugging Face API
         - Supported app input languages: English, Chinese, Malay, Tamil, and Indonesian
         """
     )
@@ -737,7 +727,7 @@ def model_info_page():
         """
         DistilBERT is used as the main app model because it achieved the strongest
         final evaluation performance among the tested approaches. Non-English text
-        is first translated to English using Meta's pre-trained NLLB multilingual
+        is first translated to English using a pre-trained OPUS-MT multilingual
         translation model through Hugging Face API, then the translated English
         text is passed into DistilBERT for emotion prediction.
         """
@@ -756,6 +746,6 @@ PAGES = {
 with st.sidebar:
     st.header("EmotionSense")
     selected_page = st.radio("Navigation", list(PAGES.keys()))
-    st.caption("DistilBERT emotion model + NLLB translation")
+    st.caption("DistilBERT emotion model + OPUS-MT translation")
 
 PAGES[selected_page]()
