@@ -5,7 +5,6 @@ import re
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import requests
 import streamlit as st
 
 
@@ -276,9 +275,13 @@ def load_translation_bundle():
     if not hf_token:
         return None, "HF_TOKEN is not configured in Streamlit secrets."
 
+    try:
+        from huggingface_hub import InferenceClient
+    except Exception as exc:
+        return None, f"Hugging Face InferenceClient is not available: {exc}"
+
     return {
-        "api_url": NLLB_API_URL,
-        "headers": {"Authorization": f"Bearer {hf_token}"},
+        "client": InferenceClient(provider="hf-inference", api_key=hf_token, timeout=120),
         "name": NLLB_MODEL_NAME,
     }, None
 
@@ -315,28 +318,16 @@ def maybe_translate_to_english(text: str, source_language: str) -> tuple[str, st
         return text, f"Pre-trained translation model unavailable, using original text instead. Details: {error}"
 
     try:
-        response = requests.post(
-            bundle["api_url"],
-            headers=bundle["headers"],
-            json={
-                "inputs": text,
-                "parameters": {
-                    "src_lang": source_code,
-                    "tgt_lang": NLLB_TARGET_LANGUAGE,
-                    "max_length": 256,
-                },
-                "options": {"wait_for_model": True},
-            },
-            timeout=60,
+        output = bundle["client"].translation(
+            text,
+            model=NLLB_MODEL_NAME,
+            src_lang=source_code,
+            tgt_lang=NLLB_TARGET_LANGUAGE,
+            generate_parameters={"max_length": 256},
         )
-        response.raise_for_status()
-        payload = response.json()
-        if isinstance(payload, list) and payload and "translation_text" in payload[0]:
-            translated = payload[0]["translation_text"]
-        elif isinstance(payload, dict) and "translation_text" in payload:
-            translated = payload["translation_text"]
-        else:
-            return text, f"Pre-trained translation returned an unexpected response: {payload}"
+        translated = getattr(output, "translation_text", output)
+        if not translated:
+            return text, "Pre-trained translation returned an empty response."
         return translated, None
     except Exception as exc:
         return text, f"Pre-trained translation failed, using original text instead. Details: {exc}"
