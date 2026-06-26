@@ -7,5 +7,4 @@ nltk>=3.8
 tensorflow>=2.16
 transformers==4.38.1
 tf-keras>=2.16
-sentencepiece>=0.2
-torch>=2.2
+requests>=2.31

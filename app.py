@@ -1,9 +1,11 @@
+import os
 from pathlib import Path
 import re
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import requests
 import streamlit as st
 
 
@@ -18,6 +20,7 @@ NLLB_LANGUAGE_CODES = {
     "Tamil": "tam_Taml",
     "Indonesian": "ind_Latn",
 }
+NLLB_API_URL = f"https://api-inference.huggingface.co/models/{NLLB_MODEL_NAME}"
 MODEL_COMPARISON_PATH = BASE_DIR / "results" / "model_comparison.png"
 
 LABEL_MAP = {
@@ -266,23 +269,18 @@ def load_dataset() -> pd.DataFrame:
 @st.cache_resource(show_spinner=False)
 def load_translation_bundle():
     try:
-        import torch
-        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-    except Exception as exc:
-        return None, f"Transformers translation classes are not available: {exc}"
+        hf_token = st.secrets.get("HF_TOKEN", None)
+    except Exception:
+        hf_token = None
+    hf_token = hf_token or os.environ.get("HF_TOKEN")
+    if not hf_token:
+        return None, "HF_TOKEN is not configured in Streamlit secrets."
 
-    try:
-        tokenizer = AutoTokenizer.from_pretrained(NLLB_MODEL_NAME)
-        model = AutoModelForSeq2SeqLM.from_pretrained(NLLB_MODEL_NAME)
-        model.eval()
-        return {
-            "model": model,
-            "tokenizer": tokenizer,
-            "torch": torch,
-            "name": NLLB_MODEL_NAME,
-        }, None
-    except Exception as exc:
-        return None, f"Pre-trained translation model could not be loaded: {exc}"
+    return {
+        "api_url": NLLB_API_URL,
+        "headers": {"Authorization": f"Bearer {hf_token}"},
+        "name": NLLB_MODEL_NAME,
+    }, None
 
 
 @st.cache_resource(show_spinner=False)
@@ -317,29 +315,28 @@ def maybe_translate_to_english(text: str, source_language: str) -> tuple[str, st
         return text, f"Pre-trained translation model unavailable, using original text instead. Details: {error}"
 
     try:
-        tokenizer = bundle["tokenizer"]
-        model = bundle["model"]
-        torch = bundle["torch"]
-        tokenizer.src_lang = source_code
-        inputs = tokenizer(
-            [text],
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            max_length=256,
+        response = requests.post(
+            bundle["api_url"],
+            headers=bundle["headers"],
+            json={
+                "inputs": text,
+                "parameters": {
+                    "src_lang": source_code,
+                    "tgt_lang": NLLB_TARGET_LANGUAGE,
+                    "max_length": 256,
+                },
+                "options": {"wait_for_model": True},
+            },
+            timeout=60,
         )
-        target_token_id = tokenizer.convert_tokens_to_ids(NLLB_TARGET_LANGUAGE)
-        with torch.no_grad():
-            generated = model.generate(
-                **inputs,
-                forced_bos_token_id=target_token_id,
-                max_length=256,
-                num_beams=4,
-                no_repeat_ngram_size=3,
-                repetition_penalty=1.1,
-                early_stopping=True,
-            )
-        translated = tokenizer.batch_decode(generated, skip_special_tokens=True)[0]
+        response.raise_for_status()
+        payload = response.json()
+        if isinstance(payload, list) and payload and "translation_text" in payload[0]:
+            translated = payload[0]["translation_text"]
+        elif isinstance(payload, dict) and "translation_text" in payload:
+            translated = payload["translation_text"]
+        else:
+            return text, f"Pre-trained translation returned an unexpected response: {payload}"
         return translated, None
     except Exception as exc:
         return text, f"Pre-trained translation failed, using original text instead. Details: {exc}"
@@ -543,7 +540,7 @@ def text_analyzer_page():
     use_translation = source_language != "English"
     st.caption("Emotion model: DistilBERT")
     if use_translation:
-        st.caption(f"Translation model: {NLLB_MODEL_NAME} translates {source_language} input to English before prediction.")
+        st.caption(f"Translation model: {NLLB_MODEL_NAME} is called through Hugging Face API to translate {source_language} input to English before prediction.")
 
     if st.button("Analyze Emotion", type="primary"):
         if not user_text.strip():
@@ -715,7 +712,7 @@ def model_info_page():
         - Preprocessing: remove URLs, punctuation, digits, stop words, then apply Porter stemming
         - Emotion classifier used in the app: DistilBERT
         - Final DistilBERT performance: 0.9273 accuracy and 0.9268 weighted F1
-        - Multi-language support: NLLB-200 distilled 600M translates non-English input to English before prediction
+        - Multi-language support: NLLB-200 distilled 600M translates non-English input to English before prediction through Hugging Face API
         - Supported app input languages: English, Chinese, Malay, Tamil, and Indonesian
         """
     )
@@ -750,8 +747,8 @@ def model_info_page():
         DistilBERT is used as the main app model because it achieved the strongest
         final evaluation performance among the tested approaches. Non-English text
         is first translated to English using Meta's pre-trained NLLB multilingual
-        translation model, then the translated English text is passed into
-        DistilBERT for emotion prediction.
+        translation model through Hugging Face API, then the translated English
+        text is passed into DistilBERT for emotion prediction.
         """
     )
 
