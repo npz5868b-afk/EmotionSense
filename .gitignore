@@ -1,0 +1,8 @@
+__pycache__/
+.venv/
+.ipynb_checkpoints/
+.streamlit/
+*.zip
+*.pyc
+results.zip
+text.csv.zip

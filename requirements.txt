@@ -1,0 +1,11 @@
+streamlit>=1.32
+pandas>=2.0
+numpy>=1.24
+matplotlib>=3.7
+wordcloud>=1.9
+nltk>=3.8
+tensorflow>=2.16
+transformers==4.38.1
+tf-keras>=2.16
+sentencepiece>=0.2
+torch>=2.2
